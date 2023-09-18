@@ -1,16 +1,14 @@
+import time
+import asyncio
+
 import discord
 from discord.ext import commands
-
 
 from dotenv import load_dotenv
 from utils import is_env_set, ask_question
 
-
 from pyopentdb import OpenTDBClient, Category, QuestionType, Difficulty
 from typing import Optional
-
-
-import time
 
 load_dotenv()
 
@@ -92,12 +90,10 @@ async def join(interaction: discord.Interaction):
 )
 async def start(
     interaction: discord.Interaction,
-    difficulty: Optional[
-        str
-    ] = Difficulty.EASY.name,  # Discuss placing default values in param types
-    category: Optional[
-        str
-    ] = Category.GENERAL_KNOWLEDGE.name,  # Dicuss what .name is and why we need to use that (print statements)
+    # Discuss placing default values in param types
+    difficulty: str = Difficulty.EASY.name,
+    # Dicuss what .name is and why we need to use that (print statements)
+    category: str = Category.GENERAL_KNOWLEDGE.name,
     amount: str = "5",
     timer: str = "15",
 ):
@@ -126,12 +122,13 @@ async def start(
     # discord.app_commands.errors.CommandInvokeError: Command 'start' raised an exception: InteractionResponded: This interaction has already been responded to before
     channel = bot.get_channel(1109275176807432202)
 
-    for question in questions:
+    for i in range(len(questions)):
+        question = questions[i]
         await ask_question(channel, question.question, question.choices, discord)
 
-        # What is time.sleep()? What does it do? - Explain that
+        # What is asyncio.sleep()? What does it do? - Explain that
         # Sleep waits 30 seconds before sending the next question to the channel
-        time.sleep(int(timer))
+        await asyncio.sleep(int(timer))
 
 
 # TODO
@@ -143,7 +140,8 @@ async def start(
     ]
 )
 async def answer(
-    interaction: discord.Interaction, answer: discord.app_commands.Choice[str]
+    interaction: discord.Interaction,
+    answer: discord.app_commands.Choice[str],
 ):
     correct_answer = "True"  # Replace with the correct answer if needed
     print(answer.value)
