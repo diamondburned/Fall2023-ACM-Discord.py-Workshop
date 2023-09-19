@@ -2,11 +2,11 @@ import discord
 from discord.ext import commands
 
 from dotenv import load_dotenv
-from utils import is_env_set, ask_question, return_sorted_leaderboard_msg
+from utils import is_env_set, ask_question, return_sorted_leaderboard_msg, restart
 
 from pyopentdb import OpenTDBClient, Category, QuestionType, Difficulty
 
-from utils import GameState
+from utils import GameState, Question
 
 load_dotenv()
 
@@ -16,7 +16,7 @@ TOKEN = is_env_set()
 bot = commands.Bot(command_prefix="/", intents=discord.Intents.all())
 # intents.all() enables your Discord bot to receive all available types of events from Discord
 
-game = GameState()
+game_state = GameState()
 
 
 @bot.event
@@ -26,7 +26,7 @@ async def on_ready():
     await bot.tree.sync()
 
     # When starting a new game we need to clear players all the time
-    game.scores.clear()
+    restart(game_state)
 
     embed = discord.Embed(
         title="Trivia Game Started!",
@@ -47,25 +47,25 @@ async def on_ready():
 @bot.tree.command(name="join")
 async def join(interaction: discord.Interaction):
     # game.is_running is determined by modifying to True in /start
-    if game.is_running:
+    if game_state.is_running:
         embed = discord.Embed(
             title=f"{interaction.user.name}, the game has already started...",
             color=discord.Color.red(),
         )
-    elif interaction.user.name not in game.scores:
+    elif interaction.user.name not in game_state.scores:
         # Create new user with their score if 0
-        game.scores[interaction.user.name] = 0
+        game_state.scores[interaction.user.name] = 0
         embed = discord.Embed(
             title=f"{interaction.user.name}, you have joined!",
             color=discord.Color.blue(),
-            description=f"**{len(game.scores)}** players waiting in line... \nIf **all players** are ready, please type **/start** to begin.",
+            description=f"**{len(game_state.scores)}** players waiting in line... \nIf **all players** are ready, please type **/start** to begin.",
         )
     else:
         # User has already joined!
         embed = discord.Embed(
             title=f"{interaction.user.name}, you have already joined!",
             color=discord.Color.red(),
-            description=f"**{len(game.scores)}** players waiting in line... \nIf **all players** are ready, please type **/start** to begin.",
+            description=f"**{len(game_state.scores)}** players waiting in line... \nIf **all players** are ready, please type **/start** to begin.",
         )
 
     await interaction.response.send_message(embed=embed)
@@ -104,7 +104,7 @@ async def start(
     category: str = Category.SCIENCE_COMPUTERS.name,
 ):
     # Enable is_running to True! We've started the game!!!
-    game.is_running = True
+    game_state.is_running = True
 
     client = OpenTDBClient()
     questions = client.get_questions(
@@ -119,14 +119,15 @@ async def start(
     answer='False', answer_index=0) ......., 
     """
 
-    # List comprehension!
-    game.questions = [
-        (question.question, question.choices, question.answer) for question in questions
+    game_state.questions = [
+        (Question(question.question, question.choices, question.answer))
+        for question in questions
     ]
+    print(game_state.questions)
 
     # game.questions = [("QUESTION 1", ["True", "False"], "ANSWER1"), ("QUESTION 2", ["True", "False"], "ANSWER2")...]
 
-    await ask_question(interaction, game.questions, game.answer, game.scores)
+    await ask_question(interaction, game_state, game_state.scores)
 
 
 @bot.tree.command(name="answer")
@@ -141,7 +142,7 @@ async def answer(
     answer: discord.app_commands.Choice[str],
 ):
     # DICUSS AT THE END
-    if interaction.user.name not in game.answer:
+    if interaction.user.name not in game_state.scores:
         embed = discord.Embed(
             title=f"**{interaction.user.name} you're not in the game! Wait till next round!**",
             color=discord.Color.red(),
@@ -155,21 +156,26 @@ async def answer(
 
     is_answer_correct = False
 
-    if answer.value == game.answer[interaction.user.name]:
-        game.scores[interaction.user.name] += 1
+    if answer.value == game_state.get_current_question().answer:
+        game_state.scores[interaction.user.name] += 1
         embed = discord.Embed(
             title=f"**{interaction.user.name} GOT THE QUESTION!**",
             color=discord.Color.green(),
         )
+
         is_answer_correct = True
+
+        game_state.current_q_index += 1
 
     else:
         embed = discord.Embed(title="**NOPE!**", color=discord.Color.red())
 
-    await interaction.followup.send(content=f"<@{interaction.user.id}>", embed=embed)
+    await interaction.response.send_message(
+        content=f"<@{interaction.user.id}>", embed=embed
+    )
 
     if is_answer_correct:
-        await ask_question(interaction, game.questions, game.answer, game.scores)
+        await ask_question(interaction, game_state, game_state.scores)
 
 
 # ------------------------------
@@ -177,7 +183,7 @@ async def answer(
 # ------------------------------
 @bot.tree.command(name="leaderboard")
 async def leaderboard(interaction: discord.Interaction):
-    embed = return_sorted_leaderboard_msg(game.scores)
+    embed = return_sorted_leaderboard_msg(game_state.scores)
 
     await interaction.response.send_message(embed=embed)
 

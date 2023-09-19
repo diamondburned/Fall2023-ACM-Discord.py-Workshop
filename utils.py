@@ -1,18 +1,28 @@
 import os
-from typing import List, Tuple, Dict
+from typing import List, Dict
 import discord
+from dataclasses import dataclass
+
+
+@dataclass
+class Question:
+    question: str
+    choices: List[any]
+    answer: str
 
 
 class GameState:
-    def __init__(self):
-        # Hold the players and the score as the value
-        self.scores: Dict[str, int] = {}
-        # Holds the question, choices, answer
-        self.questions: List[Tuple] = []
-        # Store current answer
-        self.answer: Dict[str, str] = {}
-        # If game is running
-        self.is_running: bool = False
+    current_q_index = 0
+
+    # Hold the players and the score as the value
+    scores: Dict[str, int] = {}
+    # Holds the question, choices, answer
+    questions: List[Question] = []
+    # If game is running
+    is_running: bool = False
+
+    def get_current_question(self) -> Question:
+        return self.questions[self.current_q_index]
 
 
 def is_env_set() -> str:
@@ -43,27 +53,34 @@ def return_sorted_leaderboard_msg(players: Dict[str, int]):
     return embed
 
 
-async def ask_question(interaction, questions, class_answer, players):
+def restart(game_state: GameState):
+    game_state.current_q_index = 0
+    game_state.scores.clear()
+    game_state.questions.clear()
+    game_state.is_running = False
+
+
+async def ask_question(interaction, game_state: GameState, players):
     # Do this at the end (SIDE - CASE)
-    if not questions:
+    if game_state.current_q_index >= len(game_state.questions):
         embed = return_sorted_leaderboard_msg(players)
         await interaction.channel.send(embed=embed)
+
+        restart(game_state)
+
         return  # So we dont continue with the rest of the code
 
     # Explain unpacking (tuples)
-    question, choices, answer = questions.pop()
+    current_question = game_state.get_current_question()
 
-    formatted_choices = ", ".join(choices)
+    formatted_choices = ", ".join(current_question.choices)
     # What it will look like - True, False
 
-    message = f"**{question}**\n**Choices**: {formatted_choices}"
+    message = f"**{current_question.question}**\n**Choices**: {formatted_choices}"
 
     embed = discord.Embed(
         title=f"**NEW QUESTION**", color=discord.Color.blue(), description=message
     )
-
-    for player in players.keys():
-        class_answer[player] = answer
 
     # We cannot do multiple interaction.response.send_message()
     await interaction.channel.send(embed=embed)
