@@ -46,6 +46,8 @@ async def on_ready():
 
 @bot.tree.command(name="join")
 async def join(interaction: discord.Interaction):
+    game_state.scores.clear()
+
     # game.is_running is determined by modifying to True in /start
     if game_state.is_running:
         embed = discord.Embed(
@@ -54,7 +56,6 @@ async def join(interaction: discord.Interaction):
         )
     elif interaction.user.name not in game_state.scores:
         # Create new user with their score if 0
-        game_state.scores.clear()
 
         game_state.scores[interaction.user.name] = 0
         embed = discord.Embed(
