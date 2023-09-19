@@ -13,8 +13,7 @@ load_dotenv()
 TOKEN = is_env_set()
 
 
-bot = commands.Bot(command_prefix="/", intents=discord.Intents.all())
-# intents.all() enables your Discord bot to receive all available types of events from Discord
+bot = commands.Bot(command_prefix="/", intents=discord.Intents.none())
 
 game_state = GameState()
 
@@ -132,7 +131,8 @@ async def start(
 
     # game.questions = [("QUESTION 1", ["True", "False"], "ANSWER1"), ("QUESTION 2", ["True", "False"], "ANSWER2")...]
 
-    await ask_question(interaction, game_state, game_state.scores)
+    embed = ask_question(interaction, game_state, game_state.scores)
+    await interaction.response.send_message(embed=embed)
 
 
 @bot.tree.command(name="answer")
@@ -148,39 +148,40 @@ async def answer(
 ):
     # DICUSS AT THE END
     if interaction.user.name not in game_state.scores:
-        embed = discord.Embed(
-            title=f"**{interaction.user.name} you're not in the game! Wait till next round!**",
-            color=discord.Color.red(),
-        )
-
         await interaction.response.send_message(
-            content=f"<@{interaction.user.id}>", embed=embed
+            content=f"<@{interaction.user.id}>",
+            embed=discord.Embed(
+                title=f"**{interaction.user.name} you're not in the game! Wait till next round!**",
+                color=discord.Color.red(),
+            ),
         )
 
         return
 
+    embeds = []  # we're sending multiple embeds
+
     is_answer_correct = False
 
     if answer.value == game_state.get_current_question().answer:
-        game_state.scores[interaction.user.name] += 1
-        embed = discord.Embed(
-            title=f"**{interaction.user.name} GOT THE QUESTION!**",
-            color=discord.Color.green(),
-        )
-
         is_answer_correct = True
-
         game_state.current_q_index += 1
 
+        game_state.scores[interaction.user.name] += 1
+        embeds = [
+            discord.Embed(
+                title=f"**{interaction.user.name} GOT THE QUESTION!**",
+                color=discord.Color.green(),
+            ),
+            # correct answer embed
+            ask_question(interaction, game_state, game_state.scores),
+        ]
     else:
-        embed = discord.Embed(title="**NOPE!**", color=discord.Color.red())
+        embeds = [discord.Embed(title="**NOPE!**", color=discord.Color.red())]
 
     await interaction.response.send_message(
-        content=f"<@{interaction.user.id}>", embed=embed
+        content=f"<@{interaction.user.id}>",
+        embeds=embeds,
     )
-
-    if is_answer_correct:
-        await ask_question(interaction, game_state, game_state.scores)
 
 
 # ------------------------------

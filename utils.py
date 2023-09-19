@@ -59,27 +59,25 @@ def restart(game_state: GameState):
     game_state.is_running = False
 
 
-async def ask_question(interaction, game_state: GameState, players):
+# change the game state to the next question and return the response embed
+def ask_question(
+    interaction: discord.Interaction,
+    game_state: GameState,
+    players,
+) -> discord.Embed:
     # Do this at the end (SIDE - CASE)
     if game_state.current_q_index >= len(game_state.questions):
-        embed = return_sorted_leaderboard_msg(players)
-        await interaction.channel.send(embed=embed)
-
         restart(game_state)
+        return return_sorted_leaderboard_msg(players)
 
-        return  # So we dont continue with the rest of the code
-
-    # Explain unpacking (tuples)
     current_question = game_state.get_current_question()
 
     formatted_choices = ", ".join(current_question.choices)
     # What it will look like - True, False
 
     message = f"**{current_question.question}**\n**Choices**: {formatted_choices}"
-
-    embed = discord.Embed(
-        title=f"**NEW QUESTION**", color=discord.Color.blue(), description=message
+    return discord.Embed(
+        title=f"**NEW QUESTION**",
+        color=discord.Color.blue(),
+        description=message,
     )
-
-    # We cannot do multiple interaction.response.send_message()
-    await interaction.channel.send(embed=embed)
