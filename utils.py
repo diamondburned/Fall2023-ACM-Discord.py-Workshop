@@ -7,7 +7,7 @@ from dataclasses import dataclass
 @dataclass
 class Question:
     question: str
-    choices: List[any]
+    choices: List[str]
     answer: str
 
 
@@ -24,8 +24,44 @@ class GameState:
     def get_current_question(self) -> Question:
         return self.questions[self.current_q_index]
 
+    def is_ended(self) -> bool:
+        return len(self.questions) > 0 and self.current_q_index >= len(self.questions)
 
-def is_env_set() -> str:
+
+# Track one game state per channel
+game_channels: dict[int, GameState] = {}
+
+
+def must_get_game(
+    interaction: discord.Interaction,
+    create=False,
+    accept_ended=False,
+) -> GameState | None:
+    assert interaction.channel_id is not None  # make discord.py happy :)
+
+    game_state = game_channels.get(interaction.channel_id)
+    if game_state is None:
+        if create:
+            game_state = GameState()
+            game_channels[interaction.channel_id] = game_state
+        else:
+            return None
+
+    if not accept_ended and game_state.is_ended():
+        return None
+
+    return game_state
+
+
+# cool little embed for when game is not found
+def game_not_found_embed():
+    return discord.Embed(
+        title="**No game is currently running!**",
+        color=discord.Color.red(),
+    )
+
+
+def get_token() -> str:
     TOKEN = os.getenv("DISCORD_TOKEN")
     if TOKEN is None:
         raise EnvironmentError("'DISCORD_TOKEN' is not set!")
@@ -49,37 +85,26 @@ def return_sorted_leaderboard_msg(players: Dict[str, int]):
         color=discord.Color.purple(),
         description=message_description,
     )
-
     return embed
 
 
-def restart(game_state: GameState):
-    game_state.current_q_index = 0
-    game_state.questions.clear()
-    game_state.is_running = False
-
-
-async def ask_question(interaction, game_state: GameState, players):
+# change the game state to the next question and return the response embed
+def get_question_embed(
+    interaction: discord.Interaction,
+    game_state: GameState,
+) -> discord.Embed:
     # Do this at the end (SIDE - CASE)
-    if game_state.current_q_index >= len(game_state.questions):
-        embed = return_sorted_leaderboard_msg(players)
-        await interaction.channel.send(embed=embed)
+    if game_state.is_ended():
+        return return_sorted_leaderboard_msg(game_state.scores)
 
-        restart(game_state)
-
-        return  # So we dont continue with the rest of the code
-
-    # Explain unpacking (tuples)
     current_question = game_state.get_current_question()
 
     formatted_choices = ", ".join(current_question.choices)
     # What it will look like - True, False
 
     message = f"**{current_question.question}**\n**Choices**: {formatted_choices}"
-
-    embed = discord.Embed(
-        title=f"**NEW QUESTION**", color=discord.Color.blue(), description=message
+    return discord.Embed(
+        title=f"**NEW QUESTION**",
+        color=discord.Color.blue(),
+        description=message,
     )
-
-    # We cannot do multiple interaction.response.send_message()
-    await interaction.channel.send(embed=embed)

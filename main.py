@@ -2,21 +2,27 @@ import discord
 from discord.ext import commands
 
 from dotenv import load_dotenv
-from utils import is_env_set, ask_question, return_sorted_leaderboard_msg, restart
+
+from utils import (
+    game_not_found_embed,
+    get_token,
+    get_question_embed,
+    return_sorted_leaderboard_msg,
+    game_channels,
+    must_get_game,
+    GameState,
+    Question,
+)
 
 from pyopentdb import OpenTDBClient, Category, QuestionType, Difficulty
 
-from utils import GameState, Question
 
 load_dotenv()
 
-TOKEN = is_env_set()
+TOKEN = get_token()
 
 
-bot = commands.Bot(command_prefix="/", intents=discord.Intents.all())
-# intents.all() enables your Discord bot to receive all available types of events from Discord
-
-game_state = GameState()
+bot = commands.Bot(command_prefix="/", intents=discord.Intents.none())
 
 
 @bot.event
@@ -24,9 +30,6 @@ async def on_ready():
     # Explain what a bot.tree is, why do we need to do that?
     # Syncs all the slash commands into one big tree
     await bot.tree.sync()
-
-    # When starting a new game we need to clear players all the time
-    restart(game_state)
 
     embed = discord.Embed(
         title="Trivia Game Started!",
@@ -46,9 +49,8 @@ async def on_ready():
 
 @bot.tree.command(name="join")
 async def join(interaction: discord.Interaction):
-    # Clear previous scores when joining a NEW GAME
-    # Optional, but good to see previous leaderboard
-    game_state.scores.clear()
+    game_state = must_get_game(interaction, create=True)
+    assert game_state is not None  # because create=True
 
     # game.is_running is determined by modifying to True in /start
     if game_state.is_running:
@@ -58,7 +60,6 @@ async def join(interaction: discord.Interaction):
         )
     elif interaction.user.name not in game_state.scores:
         # Create new user with their score if 0
-
         game_state.scores[interaction.user.name] = 0
         embed = discord.Embed(
             title=f"{interaction.user.name}, you have joined!",
@@ -102,12 +103,27 @@ async def join(interaction: discord.Interaction):
 )
 async def start(
     interaction: discord.Interaction,
-    amount: str = "5",
+    # Make sure to use discord.app_commands.Range to ensure minimum one question
+    amount: discord.app_commands.Range[int, 1, 100] = 5,
     # Discuss placing default values in param types
     difficulty: str = Difficulty.EASY.name,
     # Explain to look at the documentation
     category: str = Category.SCIENCE_COMPUTERS.name,
 ):
+    game_state = must_get_game(interaction)
+    if game_state is None:
+        await interaction.response.send_message(embed=game_not_found_embed())
+        return
+
+    # In case we call /start twice, we don't want to start the game twice!
+    if game_state.is_running:
+        embed = discord.Embed(
+            title=f"{interaction.user.name}, the game has already started...",
+            color=discord.Color.red(),
+        )
+        await interaction.response.send_message(embed=embed)
+        return
+
     # Enable is_running to True! We've started the game!!!
     game_state.is_running = True
 
@@ -132,7 +148,8 @@ async def start(
 
     # game.questions = [("QUESTION 1", ["True", "False"], "ANSWER1"), ("QUESTION 2", ["True", "False"], "ANSWER2")...]
 
-    await ask_question(interaction, game_state, game_state.scores)
+    embed = get_question_embed(interaction, game_state)
+    await interaction.response.send_message(embed=embed)
 
 
 @bot.tree.command(name="answer")
@@ -146,41 +163,47 @@ async def answer(
     interaction: discord.Interaction,
     answer: discord.app_commands.Choice[str],
 ):
+    game_state = must_get_game(interaction)
+    if game_state is None:
+        await interaction.response.send_message(embed=game_not_found_embed())
+        return
+
     # DICUSS AT THE END
     if interaction.user.name not in game_state.scores:
-        embed = discord.Embed(
-            title=f"**{interaction.user.name} you're not in the game! Wait till next round!**",
-            color=discord.Color.red(),
-        )
-
         await interaction.response.send_message(
-            content=f"<@{interaction.user.id}>", embed=embed
+            content=f"<@{interaction.user.id}>",
+            embed=discord.Embed(
+                title=f"**{interaction.user.name} you're not in the game! Wait till next round!**",
+                color=discord.Color.red(),
+            ),
         )
 
         return
 
+    embeds = []  # we're sending multiple embeds
+
     is_answer_correct = False
 
     if answer.value == game_state.get_current_question().answer:
-        game_state.scores[interaction.user.name] += 1
-        embed = discord.Embed(
-            title=f"**{interaction.user.name} GOT THE QUESTION!**",
-            color=discord.Color.green(),
-        )
-
         is_answer_correct = True
-
         game_state.current_q_index += 1
 
+        game_state.scores[interaction.user.name] += 1
+        embeds = [
+            discord.Embed(
+                title=f"**{interaction.user.name} GOT THE QUESTION!**",
+                color=discord.Color.green(),
+            ),
+            # correct answer embed
+            get_question_embed(interaction, game_state),
+        ]
     else:
-        embed = discord.Embed(title="**NOPE!**", color=discord.Color.red())
+        embeds = [discord.Embed(title="**NOPE!**", color=discord.Color.red())]
 
     await interaction.response.send_message(
-        content=f"<@{interaction.user.id}>", embed=embed
+        content=f"<@{interaction.user.id}>",
+        embeds=embeds,
     )
-
-    if is_answer_correct:
-        await ask_question(interaction, game_state, game_state.scores)
 
 
 # ------------------------------
@@ -188,8 +211,13 @@ async def answer(
 # ------------------------------
 @bot.tree.command(name="leaderboard")
 async def leaderboard(interaction: discord.Interaction):
-    embed = return_sorted_leaderboard_msg(game_state.scores)
+    # Allow getting leaderboard even if game has already ended
+    game_state = must_get_game(interaction, accept_ended=True)
+    if game_state is None:
+        await interaction.response.send_message(embed=game_not_found_embed())
+        return
 
+    embed = return_sorted_leaderboard_msg(game_state.scores)
     await interaction.response.send_message(embed=embed)
 
 
