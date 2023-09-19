@@ -47,36 +47,6 @@ async def on_ready():
 # ------------------------------
 
 
-@bot.tree.command(name="join")
-async def join(interaction: discord.Interaction):
-    game_state = must_get_game(interaction, create=True)
-    assert game_state is not None  # because create=True
-
-    # game.is_running is determined by modifying to True in /start
-    if game_state.is_running:
-        embed = discord.Embed(
-            title=f"{interaction.user.name}, the game has already started...",
-            color=discord.Color.red(),
-        )
-    elif interaction.user.name not in game_state.scores:
-        # Create new user with their score if 0
-        game_state.scores[interaction.user.name] = 0
-        embed = discord.Embed(
-            title=f"{interaction.user.name}, you have joined!",
-            color=discord.Color.blue(),
-            description=f"**{len(game_state.scores)}** players waiting in line... \nIf **all players** are ready, please type **/start** to begin.",
-        )
-    else:
-        # User has already joined!
-        embed = discord.Embed(
-            title=f"{interaction.user.name}, you have already joined!",
-            color=discord.Color.red(),
-            description=f"**{len(game_state.scores)}** players waiting in line... \nIf **all players** are ready, please type **/start** to begin.",
-        )
-
-    await interaction.response.send_message(embed=embed)
-
-
 # ------------------------------
 # Here explain argument types and how to make them optional!
 # ------------------------------
@@ -110,10 +80,8 @@ async def start(
     # Explain to look at the documentation
     category: str = Category.SCIENCE_COMPUTERS.name,
 ):
-    game_state = must_get_game(interaction)
-    if game_state is None:
-        await interaction.response.send_message(embed=game_not_found_embed())
-        return
+    game_state = must_get_game(interaction, create=True)
+    assert game_state is not None
 
     # In case we call /start twice, we don't want to start the game twice!
     if game_state.is_running:
@@ -168,18 +136,6 @@ async def answer(
         await interaction.response.send_message(embed=game_not_found_embed())
         return
 
-    # DICUSS AT THE END
-    if interaction.user.name not in game_state.scores:
-        await interaction.response.send_message(
-            content=f"<@{interaction.user.id}>",
-            embed=discord.Embed(
-                title=f"**{interaction.user.name} you're not in the game! Wait till next round!**",
-                color=discord.Color.red(),
-            ),
-        )
-
-        return
-
     embeds = []  # we're sending multiple embeds
 
     is_answer_correct = False
@@ -188,7 +144,9 @@ async def answer(
         is_answer_correct = True
         game_state.current_q_index += 1
 
-        game_state.scores[interaction.user.name] += 1
+        old_score = game_state.scores.get(interaction.user.name, 0)
+        game_state.scores[interaction.user.name] = old_score + 1
+
         embeds = [
             discord.Embed(
                 title=f"**{interaction.user.name} GOT THE QUESTION!**",
