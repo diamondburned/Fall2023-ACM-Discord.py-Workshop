@@ -46,6 +46,8 @@ async def on_ready():
 
 @bot.tree.command(name="join")
 async def join(interaction: discord.Interaction):
+    # Clear previous scores when joining a NEW GAME
+    # Optional, but good to see previous leaderboard
     game_state.scores.clear()
 
     # game.is_running is determined by modifying to True in /start
