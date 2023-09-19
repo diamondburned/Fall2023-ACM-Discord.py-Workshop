@@ -1,22 +1,22 @@
-import time
-import asyncio
-
 import discord
 from discord.ext import commands
 
 from dotenv import load_dotenv
-from utils import is_env_set, ask_question
+from utils import is_env_set, ask_question, return_sorted_leaderboard_msg
 
 from pyopentdb import OpenTDBClient, Category, QuestionType, Difficulty
-from typing import Optional
+
+from utils import GameState
 
 load_dotenv()
 
 TOKEN = is_env_set()
 
-bot = commands.Bot(command_prefix="", intents=discord.Intents.all())
 
-players = {}
+bot = commands.Bot(command_prefix="/", intents=discord.Intents.all())
+# intents.all() enables your Discord bot to receive all available types of events from Discord
+
+game = GameState()
 
 
 @bot.event
@@ -26,7 +26,7 @@ async def on_ready():
     await bot.tree.sync()
 
     # When starting a new game we need to clear players all the time
-    players.clear()
+    game.scores.clear()
 
     embed = discord.Embed(
         title="Trivia Game Started!",
@@ -46,18 +46,26 @@ async def on_ready():
 
 @bot.tree.command(name="join")
 async def join(interaction: discord.Interaction):
-    if interaction.user.name not in players:
-        players[interaction.user.name] = 0
+    # game.is_running is determined by modifying to True in /start
+    if game.is_running:
+        embed = discord.Embed(
+            title=f"{interaction.user.name}, the game has already started...",
+            color=discord.Color.red(),
+        )
+    elif interaction.user.name not in game.scores:
+        # Create new user with their score if 0
+        game.scores[interaction.user.name] = 0
         embed = discord.Embed(
             title=f"{interaction.user.name}, you have joined!",
             color=discord.Color.blue(),
-            description=f"**{len(players)}** players waiting in line... \nIf **all players** are ready, please type **/start** to begin.",
+            description=f"**{len(game.scores)}** players waiting in line... \nIf **all players** are ready, please type **/start** to begin.",
         )
     else:
+        # User has already joined!
         embed = discord.Embed(
             title=f"{interaction.user.name}, you have already joined!",
             color=discord.Color.red(),
-            description=f"**{len(players)}** players waiting in line... \nIf **all players** are ready, please type **/start** to begin.",
+            description=f"**{len(game.scores)}** players waiting in line... \nIf **all players** are ready, please type **/start** to begin.",
         )
 
     await interaction.response.send_message(embed=embed)
@@ -77,7 +85,6 @@ async def join(interaction: discord.Interaction):
         discord.app_commands.Choice(name="Hard", value=Difficulty.HARD.name),
     ]
 )
-@discord.app_commands.describe(timer="Time per question (DEFAULT - 30s)")
 @discord.app_commands.choices(
     category=[
         discord.app_commands.Choice(
@@ -90,15 +97,14 @@ async def join(interaction: discord.Interaction):
 )
 async def start(
     interaction: discord.Interaction,
+    amount: str = "5",
     # Discuss placing default values in param types
     difficulty: str = Difficulty.EASY.name,
-    # Dicuss what .name is and why we need to use that (print statements)
-    category: str = Category.GENERAL_KNOWLEDGE.name,
-    amount: str = "5",
-    timer: str = "15",
+    # Explain to look at the documentation
+    category: str = Category.SCIENCE_COMPUTERS.name,
 ):
-    # print("Without 'name':", Difficulty.EASY)
-    # print("With 'name':", Difficulty.EASY.name, "   --    Difficulty type:", Difficulty[category])
+    # Enable is_running to True! We've started the game!!!
+    game.is_running = True
 
     client = OpenTDBClient()
     questions = client.get_questions(
@@ -108,30 +114,21 @@ async def start(
         question_type=QuestionType.TRUE_FALSE,
     )
 
-    # Show what the questions returns!
     """
-    [Question(category=<Category.GENERAL_KNOWLEDGE: CategoryItem(id=9, name='General Knowledge', emoji='🧠', aria='brain')>, 
-    question_type=<QuestionType.TRUE_FALSE: 'boolean'>, difficulty=<Difficulty.EASY: 'easy'>, 
-    question='The Sun rises from the North.', choices=['False', 'True'], answer='False', answer_index=0), 
-    Question(category=<Category.GENERAL_KNOWLEDGE: CategoryItem(id=9, name='General Knowledge', emoji='🧠', aria='brain')>....
+    [question='The Sun rises from the North.', choices=['False', 'True'],
+    answer='False', answer_index=0) ......., 
     """
-    print(questions)
 
-    # Explain why we need to send it to a specific channel rather than sending multiple replies
-    # Error thrown if we keep doing interaction.response.send_message()
-    # discord.app_commands.errors.CommandInvokeError: Command 'start' raised an exception: InteractionResponded: This interaction has already been responded to before
-    channel = bot.get_channel(1109275176807432202)
+    # List comprehension!
+    game.questions = [
+        (question.question, question.choices, question.answer) for question in questions
+    ]
 
-    for i in range(len(questions)):
-        question = questions[i]
-        await ask_question(channel, question.question, question.choices, discord)
+    # game.questions = [("QUESTION 1", ["True", "False"], "ANSWER1"), ("QUESTION 2", ["True", "False"], "ANSWER2")...]
 
-        # What is asyncio.sleep()? What does it do? - Explain that
-        # Sleep waits 30 seconds before sending the next question to the channel
-        await asyncio.sleep(int(timer))
+    await ask_question(interaction, game.questions, game.answer, game.scores)
 
 
-# TODO
 @bot.tree.command(name="answer")
 @discord.app_commands.choices(
     answer=[
@@ -143,21 +140,36 @@ async def answer(
     interaction: discord.Interaction,
     answer: discord.app_commands.Choice[str],
 ):
-    correct_answer = "True"  # Replace with the correct answer if needed
-    print(answer.value)
-    if answer.value == correct_answer:
-        players[interaction.user.name] += 1
-        # Sending an ephemeral embed message to the user
+    # DICUSS AT THE END
+    if interaction.user.name not in game.answer:
         embed = discord.Embed(
-            title="**YOU GOT THE ANSWER RIGHT!**", color=discord.Color.green()
-        )
-    else:
-        # Sending an ephemeral message for incorrect answers
-        embed = discord.Embed(
-            title="**YOU GOT THE ANSWER RIGHT!**", color=discord.Color.green()
+            title=f"**{interaction.user.name} you're not in the game! Wait till next round!**",
+            color=discord.Color.red(),
         )
 
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(
+            content=f"<@{interaction.user.id}>", embed=embed
+        )
+
+        return
+
+    is_answer_correct = False
+
+    if answer.value == game.answer[interaction.user.name]:
+        game.scores[interaction.user.name] += 1
+        embed = discord.Embed(
+            title=f"**{interaction.user.name} GOT THE QUESTION!**",
+            color=discord.Color.green(),
+        )
+        is_answer_correct = True
+
+    else:
+        embed = discord.Embed(title="**NOPE!**", color=discord.Color.red())
+
+    await interaction.followup.send(content=f"<@{interaction.user.id}>", embed=embed)
+
+    if is_answer_correct:
+        await ask_question(interaction, game.questions, game.answer, game.scores)
 
 
 # ------------------------------
@@ -165,19 +177,7 @@ async def answer(
 # ------------------------------
 @bot.tree.command(name="leaderboard")
 async def leaderboard(interaction: discord.Interaction):
-    message_description = ""
-
-    # Briefly explain sorting dictionaries!
-    sorted_players = dict(sorted(players.items(), key=lambda x: x[1], reverse=True))
-
-    for player, score in sorted_players.items():
-        message_description += f"{player} - {score}\n"
-
-    embed = discord.Embed(
-        title=f"**LEADERBOARD**",
-        color=discord.Color.blue(),
-        description=message_description,
-    )
+    embed = return_sorted_leaderboard_msg(game.scores)
 
     await interaction.response.send_message(embed=embed)
 
