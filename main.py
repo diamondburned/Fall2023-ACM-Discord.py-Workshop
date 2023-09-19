@@ -54,6 +54,8 @@ async def join(interaction: discord.Interaction):
         )
     elif interaction.user.name not in game_state.scores:
         # Create new user with their score if 0
+        game_state.scores.clear()
+
         game_state.scores[interaction.user.name] = 0
         embed = discord.Embed(
             title=f"{interaction.user.name}, you have joined!",

@@ -55,7 +55,6 @@ def return_sorted_leaderboard_msg(players: Dict[str, int]):
 
 def restart(game_state: GameState):
     game_state.current_q_index = 0
-    game_state.scores.clear()
     game_state.questions.clear()
     game_state.is_running = False
 
