@@ -89,7 +89,7 @@ def return_sorted_leaderboard_msg(players: Dict[str, int]):
 
 
 # change the game state to the next question and return the response embed
-def ask_question(
+def get_question_embed(
     interaction: discord.Interaction,
     game_state: GameState,
 ) -> discord.Embed:

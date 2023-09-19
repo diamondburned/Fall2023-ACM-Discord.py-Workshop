@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from utils import (
     game_not_found_embed,
     get_token,
-    ask_question,
+    get_question_embed,
     return_sorted_leaderboard_msg,
     game_channels,
     must_get_game,
@@ -148,7 +148,7 @@ async def start(
 
     # game.questions = [("QUESTION 1", ["True", "False"], "ANSWER1"), ("QUESTION 2", ["True", "False"], "ANSWER2")...]
 
-    embed = ask_question(interaction, game_state)
+    embed = get_question_embed(interaction, game_state)
     await interaction.response.send_message(embed=embed)
 
 
@@ -195,7 +195,7 @@ async def answer(
                 color=discord.Color.green(),
             ),
             # correct answer embed
-            ask_question(interaction, game_state),
+            get_question_embed(interaction, game_state),
         ]
     else:
         embeds = [discord.Embed(title="**NOPE!**", color=discord.Color.red())]
