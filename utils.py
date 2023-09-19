@@ -61,7 +61,7 @@ def game_not_found_embed():
     )
 
 
-def is_env_set() -> str:
+def get_token() -> str:
     TOKEN = os.getenv("DISCORD_TOKEN")
     if TOKEN is None:
         raise EnvironmentError("'DISCORD_TOKEN' is not set!")

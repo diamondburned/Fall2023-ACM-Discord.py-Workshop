@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 from utils import (
     game_not_found_embed,
-    is_env_set,
+    get_token,
     ask_question,
     return_sorted_leaderboard_msg,
     game_channels,
@@ -19,7 +19,7 @@ from pyopentdb import OpenTDBClient, Category, QuestionType, Difficulty
 
 load_dotenv()
 
-TOKEN = is_env_set()
+TOKEN = get_token()
 
 
 bot = commands.Bot(command_prefix="/", intents=discord.Intents.none())
