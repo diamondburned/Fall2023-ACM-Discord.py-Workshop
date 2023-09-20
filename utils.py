@@ -4,6 +4,8 @@ import discord
 from dataclasses import dataclass
 
 
+# Using a dataclass basically generates constructor along
+# with others (constructor == __init__)
 @dataclass
 class Question:
     question: str
@@ -14,7 +16,7 @@ class Question:
 class GameState:
     current_q_index = 0
 
-    # Hold the players and the score as the value
+    # Hold the players username as the key and the score as the value
     scores: Dict[str, int] = {}
     # Holds the question, choices, answer
     questions: List[Question] = []
@@ -35,19 +37,21 @@ game_channels: dict[int, GameState] = {}
 def must_get_game(
     interaction: discord.Interaction,
     create=False,
-    accept_ended=False,
 ) -> GameState | None:
     assert interaction.channel_id is not None  # make discord.py happy :)
+    # A safety check to ensure we have a valid channel ID before doing anything with it in our code
 
     game_state = game_channels.get(interaction.channel_id)
+    # If there is a channel that doesnt have a game running
     if game_state is None:
+        # If we want to create a new game, create a new game state with the channel id
         if create:
             game_state = GameState()
             game_channels[interaction.channel_id] = game_state
         else:
             return None
 
-    if not accept_ended and game_state.is_ended():
+    if game_state.is_ended():
         return None
 
     return game_state
@@ -80,12 +84,11 @@ def return_sorted_leaderboard_msg(players: Dict[str, int]):
     for player, score in sorted_players:
         message_description += f"{player} - {score}\n"
 
-    embed = discord.Embed(
+    return discord.Embed(
         title=f"**LEADERBOARD**",
         color=discord.Color.purple(),
         description=message_description,
     )
-    return embed
 
 
 # change the game state to the next question and return the response embed

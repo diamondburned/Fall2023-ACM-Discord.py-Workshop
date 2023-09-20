@@ -7,10 +7,7 @@ from utils import (
     game_not_found_embed,
     get_token,
     get_question_embed,
-    return_sorted_leaderboard_msg,
-    game_channels,
     must_get_game,
-    GameState,
     Question,
 )
 
@@ -22,7 +19,7 @@ load_dotenv()
 TOKEN = get_token()
 
 
-bot = commands.Bot(command_prefix="/", intents=discord.Intents.none())
+bot = commands.Bot(command_prefix="/", intents=discord.Intents.all())
 
 
 @bot.event
@@ -50,15 +47,9 @@ async def on_ready():
 @bot.tree.command(name="join")
 async def join(interaction: discord.Interaction):
     game_state = must_get_game(interaction, create=True)
-    assert game_state is not None  # because create=True
 
     # game.is_running is determined by modifying to True in /start
-    if game_state.is_running:
-        embed = discord.Embed(
-            title=f"{interaction.user.name}, the game has already started...",
-            color=discord.Color.red(),
-        )
-    elif interaction.user.name not in game_state.scores:
+    if interaction.user.name not in game_state.scores:
         # Create new user with their score if 0
         game_state.scores[interaction.user.name] = 0
         embed = discord.Embed(
@@ -111,6 +102,8 @@ async def start(
     category: str = Category.SCIENCE_COMPUTERS.name,
 ):
     game_state = must_get_game(interaction)
+
+    # If you start a game in another channel without joining first
     if game_state is None:
         await interaction.response.send_message(embed=game_not_found_embed())
         return
@@ -144,7 +137,6 @@ async def start(
         (Question(question.question, question.choices, question.answer))
         for question in questions
     ]
-    print(game_state.questions)
 
     # game.questions = [("QUESTION 1", ["True", "False"], "ANSWER1"), ("QUESTION 2", ["True", "False"], "ANSWER2")...]
 
@@ -168,24 +160,9 @@ async def answer(
         await interaction.response.send_message(embed=game_not_found_embed())
         return
 
-    # DICUSS AT THE END
-    if interaction.user.name not in game_state.scores:
-        await interaction.response.send_message(
-            content=f"<@{interaction.user.id}>",
-            embed=discord.Embed(
-                title=f"**{interaction.user.name} you're not in the game! Wait till next round!**",
-                color=discord.Color.red(),
-            ),
-        )
-
-        return
-
     embeds = []  # we're sending multiple embeds
 
-    is_answer_correct = False
-
     if answer.value == game_state.get_current_question().answer:
-        is_answer_correct = True
         game_state.current_q_index += 1
 
         game_state.scores[interaction.user.name] += 1
@@ -204,21 +181,6 @@ async def answer(
         content=f"<@{interaction.user.id}>",
         embeds=embeds,
     )
-
-
-# ------------------------------
-# Explain here about sorting dictionaries and how it works
-# ------------------------------
-@bot.tree.command(name="leaderboard")
-async def leaderboard(interaction: discord.Interaction):
-    # Allow getting leaderboard even if game has already ended
-    game_state = must_get_game(interaction, accept_ended=True)
-    if game_state is None:
-        await interaction.response.send_message(embed=game_not_found_embed())
-        return
-
-    embed = return_sorted_leaderboard_msg(game_state.scores)
-    await interaction.response.send_message(embed=embed)
 
 
 # ------------------------------
