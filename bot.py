@@ -5,7 +5,7 @@ from pyopentdb import OpenTDBClient, Category, QuestionType, Difficulty
 from utils import game_not_found_embed, get_question_embed
 
 
-bot = commands.Bot(command_prefix="/", intents=discord.Intents.all())
+bot = commands.Bot(command_prefix="/", intents=discord.Intents.none())
 
 
 @bot.event
@@ -13,16 +13,6 @@ async def on_ready():
     # Explain what a bot.tree is, why do we need to do that?
     # Syncs all the slash commands into one big tree
     await bot.tree.sync()
-
-    embed = discord.Embed(
-        title="Trivia Game Started!",
-        color=discord.Color.brand_green(),
-        description="Join using **/join** to play!",
-    )
-
-    channel = bot.get_channel(1109275176807432202)
-
-    await channel.send(embed=embed)
 
 
 # ------------------------------
